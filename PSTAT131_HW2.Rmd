@@ -1,0 +1,105 @@
+---
+title: "PSTAT 131 HW 2"
+author: "Jay Shreedhar"
+date: '2022-04-07'
+output:
+    html_document:
+      code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+<br /><br />
+```{r, include=FALSE}
+library(ggplot2)
+library(corrplot)
+library(tidyverse)
+library(tidymodels)
+library(ggthemes)
+library(dplyr)
+library(tibble)
+library(readr)
+```
+
+```{r}
+tidymodels_prefer()
+abalone <- read.csv("abalone.csv")
+set.seed(3945)
+```
+
+**Question 1:**
+
+```{r}
+
+abalone <- abalone %>%
+  mutate(age = rings + 1.5)
+
+abalone %>% 
+  ggplot(aes(x = age)) +
+  geom_histogram(bins = 150) +
+  theme_bw()
+
+```
+<br />
+The histogram of *age* shows that the data forms a bell curve skewed to the right, with the majority of the values falling around 10. 
+<br /><br />
+**Question 2:**
+```{r}
+
+abalone_split <- initial_split(abalone, prop=0.8, strata=age)
+abalone_train <- training(abalone_split)
+abalone_test <- testing(abalone_split)
+
+```
+<br /><br />
+**Question 3:**
+```{r}
+
+abalone_recipe <- recipe(age ~ ., data=abalone_train %>% select(-rings))  %>%
+  step_dummy(all_nominal_predictors())%>% 
+  step_interact(terms = ~ starts_with("type"):shucked_weight) %>%
+  step_interact(terms = ~ longest_shell:diameter) %>%
+  step_interact(terms = ~ shucked_weight:shell_weight) %>% step_normalize() %>%   step_scale() %>% step_center(all_predictors())
+
+```
+<br /><br />
+**Question 4:**
+```{r}
+
+lm_model <- linear_reg() %>%
+  set_engine("lm")
+
+```
+<br /><br />
+**Question 5:**
+```{r}
+
+lm_workflow <- workflow() %>%
+  add_model(lm_model) %>%
+  add_recipe(abalone_recipe)
+
+```
+<br /><br />
+**Question 6:**
+```{r}
+
+lm_fit <- fit(lm_workflow, abalone_train)
+abalone_predict <- data.frame(type = 'F', longest_shell = 0.50, diameter = 0.10, height = 0.30, whole_weight = 4, shucked_weight = 1, viscera_weight = 2, shell_weight = 1)
+predict(lm_fit, new_data = abalone_predict)
+
+```
+The model predicts 24.84932.
+<br /><br />
+**Question 7:**
+```{r}
+
+library(yardstick)
+abalone_metrics <- metric_set(rmse, rsq, mae)
+abalone_tibble <- predict(lm_fit, new_data = abalone_train %>% select(-age))
+abalone_tibble <- bind_cols(abalone_tibble, abalone_train %>% select(age))
+abalone_metrics(abalone_tibble, truth = age, estimate = .pred)
+
+
+```
+The RMSE is 2.1457732. The standard $R^2$ is 0.5566857. The MAE is 1.5493796. This $R^2$ value means that 55.66% of the variation in age is explained by the other predictors. This isn't a very high value, meaning that the other predictors are not useful in determining hypothetical values of abalone age.	
